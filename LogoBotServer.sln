@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34031.279
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogoBotServer", "LogoBotServer\LogoBotServer.csproj", "{705F3C81-72CC-43D1-8BC0-95887A7629FC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{705F3C81-72CC-43D1-8BC0-95887A7629FC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{705F3C81-72CC-43D1-8BC0-95887A7629FC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{705F3C81-72CC-43D1-8BC0-95887A7629FC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{705F3C81-72CC-43D1-8BC0-95887A7629FC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AC3DB257-8CF1-4E21-AE43-C5FAFE43D9F6}
+	EndGlobalSection
+EndGlobal
