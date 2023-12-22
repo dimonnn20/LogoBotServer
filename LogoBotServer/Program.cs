@@ -1,11 +1,13 @@
 ﻿using HtmlAgilityPack;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Mail;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace LogoBotServer
@@ -13,32 +15,86 @@ namespace LogoBotServer
     class Program
     {
         public static string serialNumber = "LP10024084";
+        public static string pattern = @"^lp100\d{5}$";
         static async Task Main()
         {
 
-            List<Uri> linkList = new List<Uri>();
-            HtmlDocument htmlDocument = await getHtmlResponse(serialNumber);
-            linkList = getLinkList(htmlDocument);
-            Uri exampleLink = CorrectUrl(linkList.First());
-            List<string> strList = new List<string>();
-            foreach (var item in linkList)
+            while (true)
             {
-                strList.Add(CorrectUrl(item).ToString());
-            }
-            await WriteToFile(strList);
-            foreach (var item in strList)
-            {
-                try
-                { await DownloadFileAsync(item); }
-                catch (Exception ex)
+
+                await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP******** or exit to quit");
+                string input = Console.ReadLine().Trim().ToLower();
+                if (input.Contains("exit"))
                 {
-                    await Console.Out.WriteLineAsync(ex.Message);
+                    return;
+                }
+                if (input.Length == 10 && Regex.IsMatch(input, pattern))
+                {
+                    await Console.Out.WriteLineAsync("Processing ...");
+                    List<Uri> linkList = new List<Uri>();
+                    HtmlDocument htmlDocument;
+                    try
+                    {
+                        htmlDocument = await getHtmlResponse(input);
+                        bool isOptionCorrect = false;
+                        while (!isOptionCorrect)
+                        {
+                            await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
+                            await Console.Out.WriteLineAsync("Press 1 - If you want only documentation file");
+                            await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
+                            string input2 = Console.ReadLine().Trim().ToLower();
+                            if (input2.Contains("exit")) { return; }
+                            int option = Convert.ToInt32(input2);
+                            if (option == 1)
+                            {
+                                linkList = getLink(htmlDocument);
+                                isOptionCorrect = true;
+                            }
+                            else if (option == 2)
+                            {
+                                linkList = getLinkList(htmlDocument);
+                                isOptionCorrect = true;
+                            }
+                            else
+                            {
+                                await Console.Out.WriteLineAsync("Entered option is not supported");
+                            }
+
+
+                        }
+                        await DownloadFromList(linkList);
+
+                    }
+                    catch (Exception ex)
+                    {
+                        await Console.Out.WriteLineAsync("Sorry, something wrong");
+                        await Console.Out.WriteLineAsync(ex.Message);
+
+                    }
+
+                }
+                else
+                {
+                    await Console.Out.WriteLineAsync("Entered serial number is not correct, please try again or exit");
                 }
 
-                
             }
-            Console.ReadLine();
 
+        }
+
+        private static List<Uri> getLink(HtmlDocument htmlDocument)
+        {
+            string baseUrl = "http://10.1.5.100/tempDMS";
+            var linkList = new List<Uri>();
+            var fileLinks = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
+            foreach (var link in fileLinks)
+            {
+                string relativeUrl = link.GetAttributeValue("href", "");
+                Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
+                if (absoluteUri.ToString().Contains("print_documentation") || absoluteUri.ToString().Contains("print-documentation"))
+                { linkList.Add(absoluteUri); }
+            }
+            return linkList;
         }
 
         private static List<Uri> getLinkList(HtmlDocument htmlDocument)
@@ -127,9 +183,43 @@ namespace LogoBotServer
 
         static string getFolderName(string str)
         {
-            string startPoint = "Seriennummern";
+            string startPoint = "Seriennummern/";
             string endPoint = "&FILE";
-            return str.Substring(str.IndexOf(startPoint) + startPoint.Length, str.IndexOf(endPoint) - (str.IndexOf(startPoint) + startPoint.Length));
+            return str.Substring(str.IndexOf(startPoint) + startPoint.Length, str.IndexOf(endPoint) - (str.IndexOf(startPoint) + startPoint.Length)).Replace('/', '\\');
+        }
+        static async Task DownloadFromList(List<Uri> linkList)
+        {
+
+            if (linkList.Count > 0)
+            {
+                Stopwatch sw = new Stopwatch();
+                sw.Start();
+                List<string> strList = new List<string>();
+                foreach (var item in linkList)
+                {
+                    strList.Add(CorrectUrl(item).ToString());
+                }
+
+                foreach (var item in strList)
+                {
+                    try
+                    {
+                        await DownloadFileAsync(item);
+                    }
+                    catch (Exception ex)
+                    {
+                        await Console.Out.WriteLineAsync(ex.Message);
+                    }
+                }
+                sw.Stop();
+                await Console.Out.WriteLineAsync($"Completed for {sw.Elapsed} s");
+                Console.ReadLine();
+
+            }
+            else
+            {
+                await Console.Out.WriteLineAsync("link list is zero");
+            }
         }
     }
 }
