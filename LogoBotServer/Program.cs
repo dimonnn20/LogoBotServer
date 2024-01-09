@@ -18,6 +18,7 @@ namespace LogoBotServer
     {
         //public static string serialNumber = "LP10024084";
         public static string pattern = @"^lp100\d{5}$";
+        public static string currentSN = "";
         static async Task Main()
         {
             while (true)
@@ -28,7 +29,7 @@ namespace LogoBotServer
                 await Console.Out.WriteLineAsync("3 or exit - To quit");
                 //await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP******** or exit to quit");
                 string input = Console.ReadLine().Trim().ToLower();
-                if (input.Equals("exit") && input.Equals("3"))
+                if (input.Equals("exit") || input.Equals("3"))
                 {
                     return;
                 }
@@ -40,6 +41,7 @@ namespace LogoBotServer
                         string input1 = Console.ReadLine().Trim().ToLower();
                         if (isNumberCorrect(input1))
                         {
+                            currentSN = input1;
                             await DownloadDocFromLine(input1);
                             break;
                         }
@@ -62,7 +64,7 @@ namespace LogoBotServer
                             while (true)
                             {
                                 await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
-                                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation file");
+                                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation files");
                                 await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
                                 string input2_1 = Console.ReadLine().Trim().ToLower();
                                 if (input2_1.Equals("1"))
@@ -96,6 +98,7 @@ namespace LogoBotServer
         {
             string baseUrl = "http://10.1.5.100/tempDMS";
             var linkList = new List<Uri>();
+            Dictionary<string, Uri> addedFiles = new Dictionary<string, Uri>();
             var fileLinks = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
             if (!isOnlyDoc)
             {
@@ -106,68 +109,42 @@ namespace LogoBotServer
                     linkList.Add(absoluteUri);
                 }
             }
-            else 
+            else
             {
                 foreach (var link in fileLinks)
                 {
                     string relativeUrl = link.GetAttributeValue("href", "");
                     Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                    if (isOnlyDoc)
+                    string fileName = absoluteUri.ToString();
+                    if ((fileName.Contains("print_documentation") || fileName.Contains("print-documentation")) && !addedFiles.ContainsKey("print_documentation"))
                     {
-                        if (absoluteUri.ToString().Contains("print_documentation") || absoluteUri.ToString().Contains("print-documentation"))
-                        {
-                            linkList.Add(absoluteUri);
-                            break;
-                        }
+                        linkList.Add(absoluteUri);
+                        addedFiles.Add("print_documentation", absoluteUri);
                     }
-                }
-                foreach (var link in fileLinks)
-                {
-                    string relativeUrl = link.GetAttributeValue("href", "");
-                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                    if (isOnlyDoc)
+                    else if (fileName.Contains("EPLAN") && !addedFiles.ContainsKey("EPLAN"))
                     {
-                        if (absoluteUri.ToString().Contains("EPLAN"))
-                        {
-                            linkList.Add(absoluteUri);
-                            break;
-                        }
+                        linkList.Add(absoluteUri);
+                        addedFiles.Add("EPLAN", absoluteUri);
                     }
-                }
-                foreach (var link in fileLinks)
-                {
-                    string relativeUrl = link.GetAttributeValue("href", "");
-                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                    if (isOnlyDoc)
+                    else if (fileName.Contains("sparepartslist") && !addedFiles.ContainsKey("sparepartslist"))
                     {
-                        if (absoluteUri.ToString().Contains("sparepartslist"))
-                        {
-                            linkList.Add(absoluteUri);
-                            break;
-                        }
+                        linkList.Add(absoluteUri);
+                        addedFiles.Add("sparepartslist", absoluteUri);
                     }
-                }
-                foreach (var link in fileLinks)
-                {
-                    string relativeUrl = link.GetAttributeValue("href", "");
-                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                    if (isOnlyDoc)
+                    else if (fileName.Contains("Masszeichnung") && !addedFiles.ContainsKey("Masszeichnung"))
                     {
-                        if (absoluteUri.ToString().Contains("Masszeichnung"))
-                        {
-                            linkList.Add(absoluteUri);
-                            break;
-                        }
+                        linkList.Add(absoluteUri);
+                        addedFiles.Add("Masszeichnung", absoluteUri);
                     }
+
                 }
             }
-           
+
             return linkList;
         }
 
         static async Task<HtmlDocument> getHtmlResponse(string serialNumber)
         {
-
             string url = "http://10.1.5.100/tempDMS/index.php";
             using (HttpClient client = new HttpClient())
             {
@@ -187,7 +164,7 @@ namespace LogoBotServer
 
         }
 
-        static async Task DownloadFileAsync(string fileUrl)
+        static async Task DownloadFileByFoldersAsync(string fileUrl)
         {
             string downloadFolder = AppDomain.CurrentDomain.BaseDirectory + getFolderName(fileUrl.ToString());
             string fileName = Path.Combine(downloadFolder, getFileNameFromString(fileUrl.ToString()));
@@ -209,6 +186,18 @@ namespace LogoBotServer
             //}
 
 
+        }
+        static async Task DownloadFileAsync(string fileUrl)
+        {
+            string downloadFolder = AppDomain.CurrentDomain.BaseDirectory + currentSN;
+            string fileName = Path.Combine(downloadFolder, getFileNameFromString(fileUrl.ToString()));
+            Directory.CreateDirectory(downloadFolder);
+            using (HttpClient fileClient = new HttpClient())
+            {
+                byte[] fileContent = await fileClient.GetByteArrayAsync(fileUrl);
+                File.WriteAllBytes(fileName, fileContent);
+                Console.WriteLine($"File: {fileName} downloaded");
+            }
         }
         static Uri CorrectUrl(Uri originalUrl)
         {
@@ -254,7 +243,15 @@ namespace LogoBotServer
                 {
                     try
                     {
-                        await DownloadFileAsync(item);
+                        if (strList.Count > 10)
+                        {
+                            await DownloadFileByFoldersAsync(item);
+                        }
+                        else
+                        {
+                            await DownloadFileAsync(item);
+                        }
+
                     }
                     catch (Exception ex)
                     {
@@ -309,6 +306,7 @@ namespace LogoBotServer
                 HtmlDocument htmlDocument;
                 try
                 {
+                    currentSN = line;
                     htmlDocument = await getHtmlResponse(line);
                     linkList = GetLinks(htmlDocument, isOnlyDocumentation);
                     await DownloadFromList(linkList);
@@ -334,7 +332,7 @@ namespace LogoBotServer
             while (!isOptionCorrect)
             {
                 await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
-                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation file");
+                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation files");
                 await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
                 string input2 = Console.ReadLine().Trim().ToLower();
                 if (input2.Contains("exit")) { return; }
