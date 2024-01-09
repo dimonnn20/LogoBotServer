@@ -6,108 +6,111 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Mail;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace LogoBotServer
 {
     class Program
     {
-        public static string serialNumber = "LP10024084";
+        //public static string serialNumber = "LP10024084";
         public static string pattern = @"^lp100\d{5}$";
         static async Task Main()
         {
-
             while (true)
             {
-
-                await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP******** or exit to quit");
+                await Console.Out.WriteLineAsync("Please enter the option you want");
+                await Console.Out.WriteLineAsync("1 - To enter mashine serial number like LP********");
+                await Console.Out.WriteLineAsync("2 - To enter the name of file with some serial numbers like LP********");
+                await Console.Out.WriteLineAsync("3 or exit - To quit");
+                //await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP******** or exit to quit");
                 string input = Console.ReadLine().Trim().ToLower();
-                if (input.Contains("exit"))
+                if (input.Equals("exit") && input.Equals("3"))
                 {
                     return;
                 }
-                if (input.Length == 10 && Regex.IsMatch(input, pattern))
+                if (input.Equals("1"))
                 {
-                    await Console.Out.WriteLineAsync("Processing ...");
-                    List<Uri> linkList = new List<Uri>();
-                    HtmlDocument htmlDocument;
-                    try
+                    while (true)
                     {
-                        htmlDocument = await getHtmlResponse(input);
-                        bool isOptionCorrect = false;
-                        while (!isOptionCorrect)
+                        await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP********");
+                        string input1 = Console.ReadLine().Trim().ToLower();
+                        if (isNumberCorrect(input1))
                         {
-                            await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
-                            await Console.Out.WriteLineAsync("Press 1 - If you want only documentation file");
-                            await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
-                            string input2 = Console.ReadLine().Trim().ToLower();
-                            if (input2.Contains("exit")) { return; }
-                            int option = Convert.ToInt32(input2);
-                            if (option == 1)
-                            {
-                                linkList = getLink(htmlDocument);
-                                isOptionCorrect = true;
-                            }
-                            else if (option == 2)
-                            {
-                                linkList = getLinkList(htmlDocument);
-                                isOptionCorrect = true;
-                            }
-                            else
-                            {
-                                await Console.Out.WriteLineAsync("Entered option is not supported");
-                            }
-
-
+                            await DownloadDocFromLine(input1);
+                            break;
                         }
-                        await DownloadFromList(linkList);
-
+                        else
+                        {
+                            await Console.Out.WriteLineAsync("Entered serial number is not correct");
+                        }
                     }
-                    catch (Exception ex)
+
+                }
+                if (input.Equals("2"))
+                {
+                    while (true)
                     {
-                        await Console.Out.WriteLineAsync("Sorry, something wrong");
-                        await Console.Out.WriteLineAsync(ex.Message);
+                        await Console.Out.WriteLineAsync("Please enter the name of file in program folder like ***.txt");
+                        string input2 = Console.ReadLine().Trim().ToLower();
+                        if (input2.EndsWith(".txt"))
+                        {
+                            while (true)
+                            {
+                                await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
+                                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation file");
+                                await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
+                                string input2_1 = Console.ReadLine().Trim().ToLower();
+                                if (input2_1.Equals("1"))
+                                {
+                                    await DownloadDocFromFile(input2, true);
+                                    break;
+                                }
+                                else if (input2_1.Equals("2"))
+                                {
+                                    await DownloadDocFromFile(input2, false);
+                                    break;
+                                }
+                                else if (input2_1.Equals("exit"))
+                                {
+                                    return;
+                                }
 
+                            }
+                        }
+                        else
+                        {
+                            await Console.Out.WriteLineAsync("Entered name of file is not correct");
+                        }
                     }
+                }
+            }
+        }
 
+        private static List<Uri> getLinkList(HtmlDocument htmlDocument, bool isOnlyDoc)
+        {
+            string baseUrl = "http://10.1.5.100/tempDMS";
+            var linkList = new List<Uri>();
+            var fileLinks = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
+            foreach (var link in fileLinks)
+            {
+                string relativeUrl = link.GetAttributeValue("href", "");
+                Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
+                if (isOnlyDoc)
+                {
+                    if (absoluteUri.ToString().Contains("print_documentation") || absoluteUri.ToString().Contains("print-documentation"))
+                    {
+                        linkList.Add(absoluteUri);
+                        return linkList;
+                    }
                 }
                 else
                 {
-                    await Console.Out.WriteLineAsync("Entered serial number is not correct, please try again or exit");
+                    linkList.Add(absoluteUri);
                 }
-
-            }
-
-        }
-
-        private static List<Uri> getLink(HtmlDocument htmlDocument)
-        {
-            string baseUrl = "http://10.1.5.100/tempDMS";
-            var linkList = new List<Uri>();
-            var fileLinks = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
-            foreach (var link in fileLinks)
-            {
-                string relativeUrl = link.GetAttributeValue("href", "");
-                Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                if (absoluteUri.ToString().Contains("print_documentation") || absoluteUri.ToString().Contains("print-documentation"))
-                { linkList.Add(absoluteUri); }
-            }
-            return linkList;
-        }
-
-        private static List<Uri> getLinkList(HtmlDocument htmlDocument)
-        {
-            string baseUrl = "http://10.1.5.100/tempDMS";
-            var linkList = new List<Uri>();
-            var fileLinks = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
-            foreach (var link in fileLinks)
-            {
-                string relativeUrl = link.GetAttributeValue("href", "");
-                Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                linkList.Add(absoluteUri);
-
             }
             return linkList;
         }
@@ -145,6 +148,17 @@ namespace LogoBotServer
                 File.WriteAllBytes(fileName, fileContent);
                 Console.WriteLine($"File: {fileName} downloaded");
             }
+
+            //string downloadFolder = AppDomain.CurrentDomain.BaseDirectory;
+            //string fileName = Path.Combine(downloadFolder, getFileNameFromString(fileUrl.ToString()));
+            //using (HttpClient fileClient = new HttpClient())
+            //{
+            //    byte[] fileContent = await fileClient.GetByteArrayAsync(fileUrl);
+            //    File.WriteAllBytes(fileName, fileContent);
+            //    Console.WriteLine($"File: {fileName} downloaded");
+            //}
+
+
         }
         static async Task WriteToFile(List<string> lines)
         {
@@ -213,13 +227,112 @@ namespace LogoBotServer
                 }
                 sw.Stop();
                 await Console.Out.WriteLineAsync($"Completed for {sw.Elapsed} s");
-                Console.ReadLine();
-
             }
             else
             {
                 await Console.Out.WriteLineAsync("link list is zero");
             }
+        }
+        public static List<string> readSerialsFromFile(string name)
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name);
+            List<string> numberList = new List<string>();
+            try
+            {
+                Console.WriteLine("Start reading lines from file");
+                string line;
+                using (StreamReader reader = new StreamReader(path))
+                {
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        string input = line.ToLower().Trim();
+                        if (input.Length == 10 && Regex.IsMatch(input, pattern))
+                        {
+                            numberList.Add(input);
+                        }
+                    }
+
+                }
+                Console.WriteLine("Stop reading lines from file");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+            return numberList;
+        }
+
+        public async static Task DownloadDocFromFile(string fileName, bool isOnlyDocumentation)
+        {
+            // Начало скачивания документации из файла
+            List<string> numberList = readSerialsFromFile(fileName);
+            await Console.Out.WriteLineAsync("Start downloading files");
+            foreach (string line in numberList)
+            {
+                List<Uri> linkList = new List<Uri>();
+                HtmlDocument htmlDocument;
+                try
+                {
+                    htmlDocument = await getHtmlResponse(line);
+                    linkList = getLinkList(htmlDocument, isOnlyDocumentation);
+                    await DownloadFromList(linkList);
+                    await Console.Out.WriteLineAsync($"Success for SN: {line}");
+                }
+                catch (Exception ex)
+                {
+                    await Console.Out.WriteLineAsync("Sorry, something wrong");
+                    await Console.Out.WriteLineAsync(ex.Message);
+
+                }
+
+            }
+            await Console.Out.WriteLineAsync("Stop downloading files");
+            Console.ReadLine();
+        }
+        public async static Task DownloadDocFromLine(string serialNumber)
+        {
+            List<Uri> linkList = new List<Uri>();
+            HtmlDocument htmlDocument;
+            htmlDocument = await getHtmlResponse(serialNumber);
+            bool isOptionCorrect = false;
+            while (!isOptionCorrect)
+            {
+                await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
+                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation file");
+                await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
+                string input2 = Console.ReadLine().Trim().ToLower();
+                if (input2.Contains("exit")) { return; }
+                await Console.Out.WriteLineAsync("Processing, please wait ...");
+                int option = Convert.ToInt32(input2);
+                if (option == 1)
+                {
+                    linkList = getLinkList(htmlDocument, true);
+                    isOptionCorrect = true;
+                }
+                else if (option == 2)
+                {
+                    linkList = getLinkList(htmlDocument, false);
+                    isOptionCorrect = true;
+                }
+                else
+                {
+                    await Console.Out.WriteLineAsync("Entered option is not supported");
+                }
+            }
+            try
+            {
+                await DownloadFromList(linkList);
+            }
+            catch (Exception ex)
+            {
+                await Console.Out.WriteLineAsync("Sorry, something wrong");
+                await Console.Out.WriteLineAsync(ex.Message);
+
+            }
+        }
+        public static bool isNumberCorrect(string number)
+        {
+            return (number.Length == 10 && Regex.IsMatch(number, pattern));
         }
     }
 }
