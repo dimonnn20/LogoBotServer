@@ -56,6 +56,7 @@ namespace LogoBotServer
                     {
                         await Console.Out.WriteLineAsync("Please enter the name of file in program folder like ***.txt");
                         string input2 = Console.ReadLine().Trim().ToLower();
+                        if (input2.Equals("exit")) return;
                         if (input2.EndsWith(".txt"))
                         {
                             while (true)
@@ -80,6 +81,7 @@ namespace LogoBotServer
                                 }
 
                             }
+                            break;
                         }
                         else
                         {
@@ -90,28 +92,76 @@ namespace LogoBotServer
             }
         }
 
-        private static List<Uri> getLinkList(HtmlDocument htmlDocument, bool isOnlyDoc)
+        private static List<Uri> GetLinks(HtmlDocument htmlDocument, bool isOnlyDoc)
         {
             string baseUrl = "http://10.1.5.100/tempDMS";
             var linkList = new List<Uri>();
             var fileLinks = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
-            foreach (var link in fileLinks)
+            if (!isOnlyDoc)
             {
-                string relativeUrl = link.GetAttributeValue("href", "");
-                Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
-                if (isOnlyDoc)
+                foreach (var link in fileLinks)
                 {
-                    if (absoluteUri.ToString().Contains("print_documentation") || absoluteUri.ToString().Contains("print-documentation"))
-                    {
-                        linkList.Add(absoluteUri);
-                        return linkList;
-                    }
-                }
-                else
-                {
+                    string relativeUrl = link.GetAttributeValue("href", "");
+                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
                     linkList.Add(absoluteUri);
                 }
             }
+            else 
+            {
+                foreach (var link in fileLinks)
+                {
+                    string relativeUrl = link.GetAttributeValue("href", "");
+                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
+                    if (isOnlyDoc)
+                    {
+                        if (absoluteUri.ToString().Contains("print_documentation") || absoluteUri.ToString().Contains("print-documentation"))
+                        {
+                            linkList.Add(absoluteUri);
+                            break;
+                        }
+                    }
+                }
+                foreach (var link in fileLinks)
+                {
+                    string relativeUrl = link.GetAttributeValue("href", "");
+                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
+                    if (isOnlyDoc)
+                    {
+                        if (absoluteUri.ToString().Contains("EPLAN"))
+                        {
+                            linkList.Add(absoluteUri);
+                            break;
+                        }
+                    }
+                }
+                foreach (var link in fileLinks)
+                {
+                    string relativeUrl = link.GetAttributeValue("href", "");
+                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
+                    if (isOnlyDoc)
+                    {
+                        if (absoluteUri.ToString().Contains("sparepartslist"))
+                        {
+                            linkList.Add(absoluteUri);
+                            break;
+                        }
+                    }
+                }
+                foreach (var link in fileLinks)
+                {
+                    string relativeUrl = link.GetAttributeValue("href", "");
+                    Uri absoluteUri = new Uri(new Uri(baseUrl), relativeUrl);
+                    if (isOnlyDoc)
+                    {
+                        if (absoluteUri.ToString().Contains("Masszeichnung"))
+                        {
+                            linkList.Add(absoluteUri);
+                            break;
+                        }
+                    }
+                }
+            }
+           
             return linkList;
         }
 
@@ -159,20 +209,6 @@ namespace LogoBotServer
             //}
 
 
-        }
-        static async Task WriteToFile(List<string> lines)
-        {
-            string fileName = $"{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.txt";
-            string pathToSave = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
-            using (FileStream stream = new FileStream(pathToSave, FileMode.OpenOrCreate))
-            {
-                foreach (string line in lines)
-                {
-                    await stream.WriteAsync(Encoding.Default.GetBytes(line), 0, Encoding.Default.GetByteCount(line));
-                    await stream.WriteAsync(Encoding.Default.GetBytes("\n"), 0, 1);
-                }
-            }
-            await Console.Out.WriteLineAsync($"Report is successfuly saved to {pathToSave}");
         }
         static Uri CorrectUrl(Uri originalUrl)
         {
@@ -233,7 +269,7 @@ namespace LogoBotServer
                 await Console.Out.WriteLineAsync("link list is zero");
             }
         }
-        public static List<string> readSerialsFromFile(string name)
+        public static List<string> ReadSerialsFromFile(string name)
         {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name);
             List<string> numberList = new List<string>();
@@ -265,7 +301,7 @@ namespace LogoBotServer
         public async static Task DownloadDocFromFile(string fileName, bool isOnlyDocumentation)
         {
             // Начало скачивания документации из файла
-            List<string> numberList = readSerialsFromFile(fileName);
+            List<string> numberList = ReadSerialsFromFile(fileName);
             await Console.Out.WriteLineAsync("Start downloading files");
             foreach (string line in numberList)
             {
@@ -274,7 +310,7 @@ namespace LogoBotServer
                 try
                 {
                     htmlDocument = await getHtmlResponse(line);
-                    linkList = getLinkList(htmlDocument, isOnlyDocumentation);
+                    linkList = GetLinks(htmlDocument, isOnlyDocumentation);
                     await DownloadFromList(linkList);
                     await Console.Out.WriteLineAsync($"Success for SN: {line}");
                 }
@@ -306,12 +342,12 @@ namespace LogoBotServer
                 int option = Convert.ToInt32(input2);
                 if (option == 1)
                 {
-                    linkList = getLinkList(htmlDocument, true);
+                    linkList = GetLinks(htmlDocument, true);
                     isOptionCorrect = true;
                 }
                 else if (option == 2)
                 {
-                    linkList = getLinkList(htmlDocument, false);
+                    linkList = GetLinks(htmlDocument, false);
                     isOptionCorrect = true;
                 }
                 else
