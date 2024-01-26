@@ -1,4 +1,5 @@
 ﻿using HtmlAgilityPack;
+using Org.BouncyCastle.Tls;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,9 +7,11 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Mail;
+using System.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
@@ -21,77 +24,45 @@ namespace LogoBotServer
         public static string currentSN = "";
         static async Task Main()
         {
+            MailHelper mailHelper = new MailHelper();
             while (true)
             {
-                await Console.Out.WriteLineAsync("Please enter the option you want");
-                await Console.Out.WriteLineAsync("1 - To enter mashine serial number like LP********");
-                await Console.Out.WriteLineAsync("2 - To enter the name of file with some serial numbers like LP********");
-                await Console.Out.WriteLineAsync("3 or exit - To quit");
-                //await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP******** or exit to quit");
-                string input = Console.ReadLine().Trim().ToLower();
-                if (input.Equals("exit") || input.Equals("3"))
+                Dictionary<string, string> readedEmails = await mailHelper.ReadEmails();
+                if (readedEmails.Count > 0)
                 {
-                    return;
-                }
-                if (input.Equals("1"))
-                {
-                    while (true)
+                    await Console.Out.WriteLineAsync("readedEmails.Count > 0");
+                    Dictionary <string, string> keyValuePairs = new Dictionary<string, string>();
+                    foreach (var key in readedEmails)
                     {
-                        await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP********");
-                        string input1 = Console.ReadLine().Trim().ToLower();
-                        if (isNumberCorrect(input1))
+                        List<string> serialsFromDictionary = ParseEmailSubject(key.Value);
+                        foreach (var item in serialsFromDictionary)
                         {
-                            currentSN = input1;
-                            await DownloadDocFromLine(input1);
-                            break;
-                        }
-                        else
-                        {
-                            await Console.Out.WriteLineAsync("Entered serial number is not correct");
+                            keyValuePairs.Add(key.Key, item);
                         }
                     }
-
-                }
-                if (input.Equals("2"))
-                {
-                    while (true)
+                    Dictionary <string,string> dictionaryOfMainFolders = new Dictionary<string, string>();
+                    foreach (var item in keyValuePairs)
                     {
-                        await Console.Out.WriteLineAsync("Please enter the name of file in program folder like ***.txt");
-                        string input2 = Console.ReadLine().Trim().ToLower();
-                        if (input2.Equals("exit")) return;
-                        if (input2.EndsWith(".txt"))
-                        {
-                            while (true)
-                            {
-                                await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
-                                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation files");
-                                await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
-                                string input2_1 = Console.ReadLine().Trim().ToLower();
-                                if (input2_1.Equals("1"))
-                                {
-                                    await DownloadDocFromFile(input2, true);
-                                    break;
-                                }
-                                else if (input2_1.Equals("2"))
-                                {
-                                    await DownloadDocFromFile(input2, false);
-                                    break;
-                                }
-                                else if (input2_1.Equals("exit"))
-                                {
-                                    return;
-                                }
-
-                            }
-                            break;
-                        }
-                        else
-                        {
-                            await Console.Out.WriteLineAsync("Entered name of file is not correct");
-                        }
+                        string str = await GetOnlyDocByLpSN(item.Value);    
+                        dictionaryOfMainFolders.Add(item.Key,str);
                     }
+
+                    foreach (var item in dictionaryOfMainFolders)
+                    {
+                        mailHelper.SendEmailFile(item.Key,item.Value);
+                    }
+
+
                 }
+                await Console.Out.WriteLineAsync("Start waiting 60 sec");
+                await Task.Delay(60000);
+                await Console.Out.WriteLineAsync("Stopped waiting 60 sec");
+                //Thread.Sleep(60000);
             }
+
+            Console.ReadLine();
+
+            //await StartAsync();
         }
 
         private static List<Uri> GetLinks(HtmlDocument htmlDocument, bool isOnlyDoc)
@@ -185,9 +156,8 @@ namespace LogoBotServer
             //    Console.WriteLine($"File: {fileName} downloaded");
             //}
 
-
         }
-        static async Task DownloadFileAsync(string fileUrl)
+        static async Task <string> DownloadFileAsync(string fileUrl)
         {
             string downloadFolder = AppDomain.CurrentDomain.BaseDirectory + currentSN;
             string fileName = Path.Combine(downloadFolder, getFileNameFromString(fileUrl.ToString()));
@@ -198,6 +168,7 @@ namespace LogoBotServer
                 File.WriteAllBytes(fileName, fileContent);
                 Console.WriteLine($"File: {fileName} downloaded");
             }
+            return downloadFolder;
         }
         static Uri CorrectUrl(Uri originalUrl)
         {
@@ -226,11 +197,17 @@ namespace LogoBotServer
             string endPoint = "&FILE";
             return str.Substring(str.IndexOf(startPoint) + startPoint.Length, str.IndexOf(endPoint) - (str.IndexOf(startPoint) + startPoint.Length)).Replace('/', '\\');
         }
-        static async Task DownloadFromList(List<Uri> linkList)
+        static string getMainFolderName(string str)
         {
-
+            string startPoint = "Seriennummern/";
+            return str.Substring(str.IndexOf(startPoint) + startPoint.Length, 10).Replace('/', '\\');
+        }
+        static async Task <string> DownloadFromList(List<Uri> linkList)
+        {
+            string pathToMainFolder = "";
             if (linkList.Count > 0)
             {
+                
                 Stopwatch sw = new Stopwatch();
                 sw.Start();
                 List<string> strList = new List<string>();
@@ -238,7 +215,7 @@ namespace LogoBotServer
                 {
                     strList.Add(CorrectUrl(item).ToString());
                 }
-
+                pathToMainFolder = AppDomain.CurrentDomain.BaseDirectory + getMainFolderName(strList[0].ToString());
                 foreach (var item in strList)
                 {
                     try
@@ -265,6 +242,7 @@ namespace LogoBotServer
             {
                 await Console.Out.WriteLineAsync("link list is zero");
             }
+            return pathToMainFolder;
         }
         public static List<string> ReadSerialsFromFile(string name)
         {
@@ -367,6 +345,103 @@ namespace LogoBotServer
         public static bool isNumberCorrect(string number)
         {
             return (number.Length == 10 && Regex.IsMatch(number, pattern));
+        }
+
+        public static async Task <string> GetOnlyDocByLpSN(string SN)
+        {
+                string pathToMainFolder = "";
+                HtmlDocument htmlDocument = await getHtmlResponse(SN);
+                List<Uri> linkList = GetLinks(htmlDocument, true);
+                pathToMainFolder = await DownloadFromList(linkList);
+                return pathToMainFolder;
+        }
+
+        public string getAllDocByLpSN(List<string> listOfLpSn)
+        {
+            throw new NotImplementedException();
+        }
+
+        public static async Task StartAsync()
+        {
+            while (true)
+            {
+                await Console.Out.WriteLineAsync("Please enter the option you want");
+                await Console.Out.WriteLineAsync("1 - To enter mashine serial number like LP********");
+                await Console.Out.WriteLineAsync("2 - To enter the name of file with some serial numbers like LP********");
+                await Console.Out.WriteLineAsync("3 or exit - To quit");
+                //await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP******** or exit to quit");
+                string input = Console.ReadLine().Trim().ToLower();
+                if (input.Equals("exit") || input.Equals("3"))
+                {
+                    return;
+                }
+                if (input.Equals("1"))
+                {
+                    while (true)
+                    {
+                        await Console.Out.WriteLineAsync("Please enter the mashine serial number like LP********");
+                        string input1 = Console.ReadLine().Trim().ToLower();
+                        if (isNumberCorrect(input1))
+                        {
+                            currentSN = input1;
+                            await DownloadDocFromLine(input1);
+                            break;
+                        }
+                        else
+                        {
+                            await Console.Out.WriteLineAsync("Entered serial number is not correct");
+                        }
+                    }
+
+                }
+                if (input.Equals("2"))
+                {
+                    while (true)
+                    {
+                        await Console.Out.WriteLineAsync("Please enter the name of file in program folder like ***.txt");
+                        string input2 = Console.ReadLine().Trim().ToLower();
+                        if (input2.Equals("exit")) return;
+                        if (input2.EndsWith(".txt"))
+                        {
+                            while (true)
+                            {
+                                await Console.Out.WriteLineAsync("Please choose digit of the option and press enter or type exit to quit:");
+                                await Console.Out.WriteLineAsync("Press 1 - If you want only documentation files");
+                                await Console.Out.WriteLineAsync("Press 2 - If you want the whole documentation");
+                                string input2_1 = Console.ReadLine().Trim().ToLower();
+                                if (input2_1.Equals("1"))
+                                {
+                                    await DownloadDocFromFile(input2, true);
+                                    break;
+                                }
+                                else if (input2_1.Equals("2"))
+                                {
+                                    await DownloadDocFromFile(input2, false);
+                                    break;
+                                }
+                                else if (input2_1.Equals("exit"))
+                                {
+                                    return;
+                                }
+
+                            }
+                            break;
+                        }
+                        else
+                        {
+                            await Console.Out.WriteLineAsync("Entered name of file is not correct");
+                        }
+                    }
+                }
+            }
+        }
+
+        public static List<string> ParseEmailSubject(string subject)
+        { 
+        List <string> listOfSnFromEmailSubject = new List<string>();
+            var parsedSubject = subject.Split(';');
+            listOfSnFromEmailSubject = parsedSubject.ToList();
+            return listOfSnFromEmailSubject;
         }
     }
 }
